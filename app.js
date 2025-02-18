@@ -530,23 +530,27 @@ app.post("/register-user-admin", async (req, res) => {
     roleAccount,
     accountNameBranchManning,
   } = req.body;
-  const encryptedPassword = await bcrypt.hash(password, 8);
-
-  const oldUser = await User.findOne({ emailAddress: emailAddress });
-
-  const dateNow = new Date();
-  let type;
-
-  if (oldUser) return res.send({ data: "User already exist!" });
-
-  if (roleAccount === "Coordinator") {
-    type = 2;
-  } else {
-    type = 3;
-  }
 
   try {
-    await User.create({
+    const encryptedPassword = await bcrypt.hash(password, 8);
+    const oldUser = await User.findOne({ emailAddress: emailAddress });
+
+    if (oldUser) {
+      return res
+        .status(400)
+        .send({ status: "error", data: "User already exists!" });
+    }
+
+    const dateNow = new Date();
+    let type;
+
+    if (roleAccount === "Coordinator") {
+      type = 2;
+    } else {
+      type = 3;
+    }
+
+    const newUser = await User.create({
       roleAccount,
       accountNameBranchManning,
       firstName,
@@ -559,13 +563,18 @@ app.post("/register-user-admin", async (req, res) => {
       j_date: dateNow,
       type: type,
     });
-    await Coordinator.create({
-      coorEmailAdd: emailAddress,
-      MerchandiserEmail: [],
-    });
-    res.send({ status: 200, data: "User Created" });
+
+    if (roleAccount === "Coordinator") {
+      await Coordinator.create({
+        coorEmailAdd: emailAddress,
+        MerchandiserEmail: [],
+      });
+    }
+
+    res.status(200).send({ status: 200, data: "User Created" });
   } catch (error) {
-    res.send({ status: "error", data: error });
+    console.error("Error creating user:", error);
+    res.status(500).send({ status: "error", data: error.message });
   }
 });
 
