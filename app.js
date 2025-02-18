@@ -1090,7 +1090,7 @@ const transporter = nodemailer.createTransport({
 });
 
 app.post("/send-otp-register", async (req, res) => {
-  const { emailAddress } = req.body;
+  const { email } = req.body;
 
   try {
     var code = Math.floor(100000 + Math.random() * 900000);
@@ -1102,7 +1102,7 @@ app.post("/send-otp-register", async (req, res) => {
         name: "BMPower",
         address: process.env.email,
       },
-      to: emailAddress,
+      to: email,
       subject: "OTP code",
       html:
         "<b>Your OTP code is</b> " +
