@@ -627,7 +627,6 @@ app.post("/get-admin-user", async (req, res) => {
           emailAddress: 1,
           contactNum: 1,
           isActivate: 1,
-          // "j_date" : 1,
         },
       },
     ]);
