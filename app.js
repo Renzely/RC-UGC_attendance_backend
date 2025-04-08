@@ -5,10 +5,10 @@ require("./UserDetails");
 // require("./AttendanceDetails");
 // require("./ParcelDetails");
 // require("./AttendanceInput");
-// require("./ParcelInput");
+require("./CompetitorData");
 // require("./CoorDetails");
 // require("./InventoryData");
-// require("./RtvData");
+require("./QTTScoringData");
 require("./HistoryAttendance");
 // require("./status")
 const AWS = require("aws-sdk");
@@ -36,9 +36,9 @@ const Attendance = mongoose.model("Attendance");
 
 // const Coordinator = mongoose.model("TowiCoordinator")
 
-// const RTV = mongoose.model("TowiReturnToVendor");
+const QTTS = mongoose.model("QTTScoring");
 
-// const Parcel = mongoose.model("Towiinventory");
+const competitorsData = mongoose.model("Competitors");
 
 // const AttendanceInput = mongoose.model("attendanceInput");
 
@@ -116,6 +116,38 @@ const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
+});
+
+const QTTs3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID_QTT_COMPE,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_QTT_COMPE,
+  region: process.env.AWS_REGION_QTT_COMPE,
+});
+
+// Endpoint to generate a pre-signed URL for image uploads
+app.post("/save-QTTScoring-images", (req, res) => {
+  const { fileName } = req.body;
+
+  if (!fileName) {
+    return res.status(400).json({ error: "File name is required" });
+  }
+
+  const params = {
+    Bucket: "qtt-scoring-rc",
+    Key: fileName,
+    Expires: 300, // URL expiration time (5 minutes)
+    ContentType: "image/jpeg", // Adjust based on file type
+  };
+
+  QTTs3.getSignedUrl("putObject", params, (err, url) => {
+    if (err) {
+      console.error("Error generating pre-signed URL:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate pre-signed URL" });
+    }
+    res.json({ url });
+  });
 });
 
 // Endpoint to generate pre-signed URL
@@ -595,7 +627,6 @@ app.post("/get-admin-user", async (req, res) => {
           emailAddress: 1,
           contactNum: 1,
           isActivate: 1,
-          // "j_date" : 1,
         },
       },
     ]);
@@ -613,32 +644,32 @@ app.post("/login-admin", async (req, res) => {
   if (!oldUser)
     return res.send({ status: 401, data: "Invalid email or password" });
 
-  if (!oldUser.type === 2)
-    return res.send({ status: 401, data: "Invalid User." });
+  if (oldUser.type !== 3) {
+    return res.send({
+      status: 401,
+      data: "Only admins are allowed to login here.",
+    });
+  }
 
-  if (oldUser.isActivate === false)
+  if (!oldUser.isActivate)
     return res.send({ status: 401, data: "User is already deactivated." });
 
   if (await bcrypt.compare(password, oldUser.password)) {
     const token = jwt.sign({ emailAddress: oldUser.emailAddress }, JWT_SECRET);
 
-    if (res.status(201)) {
-      return res.send({
-        status: 200,
-        data: {
-          token,
-          emailAddress: oldUser.emailAddress,
-          firstName: oldUser.firstName,
-          middleName: oldUser.middleName,
-          lastName: oldUser.lastName,
-          contactNum: oldUser.contactNum,
-          roleAccount: oldUser.roleAccount,
-          accountNameBranchManning: oldUser.accountNameBranchManning, // Include roleAccount in the response
-        },
-      });
-    } else {
-      return res.send({ error: "error" });
-    }
+    return res.send({
+      status: 200,
+      data: {
+        token,
+        emailAddress: oldUser.emailAddress,
+        firstName: oldUser.firstName,
+        middleName: oldUser.middleName,
+        lastName: oldUser.lastName,
+        contactNum: oldUser.contactNum,
+        roleAccount: oldUser.roleAccount,
+        accountNameBranchManning: oldUser.accountNameBranchManning,
+      },
+    });
   } else {
     return res.send({ status: 401, data: "Invalid user or password" });
   }
@@ -834,246 +865,355 @@ app.post("/view-user-attendance", async (req, res) => {
 //   }
 // });
 
-// app.post("/retrieve-parcel-data", async (req, res) => {
-
+// app.post("/retrieve-competitor-data", async (req, res) => {
 //   try {
-//     const parcelPerUser = await ParcelData.find();
+//     const competitordata = await competitorsData.find();
 
-//     console.log("Found parcels:", parcelPerUser);
-//     return res.status(200).json({ status: 200, data: parcelPerUser });
+//     console.log("Found Compe:", competitordata);
+//     return res.status(200).json({ status: 200, data: competitordata });
 //   } catch (error) {
 //     return res.send({ error: error });
 //   }
 // });
 
-// app.post("/filter-date-range", async (req, res) => {
-//   const { startDate, endDate } = req.body; // Expect startDate and endDate in the request body
-//   console.log("Filter range:", { startDate, endDate });
+app.post("/filter-date-range", async (req, res) => {
+  const { startDate, endDate } = req.body; // Expect startDate and endDate in the request body
+  console.log("Filter range:", { startDate, endDate });
 
-//   try {
-//     // Fetch parcels where the date is within the range
-//     const parcelsInRange = await ParcelData.find({
-//       date: { $gte: startDate, $lte: endDate },
-//     });
+  try {
+    // Fetch parcels where the date is within the range
+    const competitorsDataRange = await competitorsData.find({
+      date: { $gte: startDate, $lte: endDate },
+    });
 
-//     console.log("Found parcels in range:", parcelsInRange);
-//     return res.status(200).json({ status: 200, data: parcelsInRange });
-//   } catch (error) {
-//     console.error("Error fetching parcels:", error);
-//     return res.status(500).send({ error: "Internal Server Error" });
-//   }
-// });
+    console.log("Found parcels in range:", competitorsDataRange);
+    return res.status(200).json({ status: 200, data: competitorsDataRange });
+  } catch (error) {
+    console.error("Error fetching parcels:", error);
+    return res.status(500).send({ error: "Internal Server Error" });
+  }
+});
 
-// app.post("/retrieve-parcel-data", async (req, res) => {
-//   try {
-//     const { branches } = req.body; // Get the branch list from the request body
+app.post("/retrieve-competitor-data", async (req, res) => {
+  try {
+    const { branches } = req.body;
 
-//     if (!branches || !Array.isArray(branches)) {
-//       return res.status(400).json({ status: 400, message: "Invalid branch data" });
-//     }
+    console.log("Received branches:", branches);
 
-//     // Find parcels that match the provided branches
-//     const parcelPerUser = await ParcelData.find({
-//       accountNameBranchManning: { $in: branches }
-//     });
+    // Validate that branches is an array
+    if (!branches || !Array.isArray(branches)) {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Invalid branch data" });
+    }
 
-//     console.log("Filtered parcels:", parcelPerUser);
-//     return res.status(200).json({ status: 200, data: parcelPerUser });
-//   } catch (error) {
-//     console.error("Error retrieving parcels:", error);
-//     return res.status(500).json({ status: 500, error: "Server error" });
-//   }
-// });
+    // Retrieve all competitor data for debugging
+    const allCompetitorData = await competitorsData.find({});
+    console.log("All Competitor Data:", allCompetitorData);
 
-// app.post("/retrieve-RTV-data", async (req, res) => {
-//   const { branches } = req.body; // Get branches from request body
+    // Log the regex patterns for matching branches
+    const branchPatterns = branches.map(
+      (branch) => new RegExp(`^${branch.trim()}$`, "i")
+    );
+    console.log("Branch regex patterns:", branchPatterns);
 
-//   if (!branches || !Array.isArray(branches)) {
-//     return res.status(400).json({ status: 400, message: "Invalid branch data" });
-//   }
+    // Find competitors matching the provided branches
+    const competitorsdata = await competitorsData.find({
+      outlet: {
+        $in: branches.map((branch) => new RegExp(branch.trim(), "i")),
+      },
+    });
+    console.log("Competitors data after filtering:", competitorsdata);
 
-//   try {
-//     const rtvData = await RTV.find({
-//       outlet: { $in: branches }, // Filter by branches
-//     });
+    console.log("Filtered Competitor Data:", competitorsdata);
 
-//     console.log("Filtered RTV data:", rtvData);
-//     return res.status(200).json({ status: 200, data: rtvData });
-//   } catch (error) {
-//     console.error("Error retrieving RTV data:", error);
-//     return res.status(500).json({ status: 500, message: "Server error" });
-//   }
-// });
+    if (competitorsdata.length === 0) {
+      console.warn("No matching competitor data found.");
+      return res.status(200).json({ status: 200, data: [] });
+    }
 
-// app.post("/export-inventory-data-towi", async (req, res) => {
-//   const { start, end } = req.body;
+    return res.status(200).json({ status: 200, data: competitorsdata });
+  } catch (error) {
+    console.error("Error retrieving competitors data:", error);
+    return res.status(500).json({ status: 500, error: "Server error" });
+  }
+});
 
-//   try {
-//       const data = await mongoose.model("TowiInventory").aggregate([
-//           // Match documents within the specified date range
-//           {
-//               $match: {
-//                   $expr: {
-//                       $and: [
-//                           { $gte: [{ $toDate: "$date" }, new Date(start)] },
-//                           { $lt: [{ $toDate: "$date" }, new Date(end)] }
-//                       ]
-//                   }
-//               }
-//           },
-//           // Optionally join with another collection if needed
-//           {
-//               $lookup: {
-//                   from: "users",
-//                   localField: "UserEmail", // Adjust field to match schema
-//                   foreignField: "email",
-//                   as: "user_details"
-//               }
-//           },
-//           // Flatten the structure by merging user details into the root object
-//           {
-//               $replaceRoot: {
-//                   newRoot: {
-//                       $mergeObjects: [
-//                           { $arrayElemAt: ["$user_details", 0] },
-//                           "$$ROOT"
-//                       ]
-//                   }
-//               }
-//           },
-//           // Select and rename fields for the output
-//           {
-//             $project: {
-//                 date: 1,
-//                 name: 1,
-//                 inputId: 1,
-//                 UserEmail: 1,
-//                 accountNameBranchManning: 1,
-//                 period: 1,
-//                 month: 1,
-//                 week: 1,
-//                 skuDescription: 1,
-//                 skuCode: 1,
-//                 status: 1,
-//                 beginningSA: 1,
-//                 beginningWA: 1,
-//                 beginning: 1,
-//                 delivery: 1,
-//                 endingSA: 1,
-//                 endingWA: 1,
-//                 ending: 1,
-//                 expiryFields: {
-//                     $map: {
-//                         input: "$expiryFields",
-//                         as: "expiry",
-//                         in: {
-//                           expiryMonth: "$$expiry.expiryMonth",
-//                           expiryPcs: "$$expiry.expiryPcs" // Example keys
-//                         }
-//                     }
-//                 },
-//                 offtake: 1,
-//                 inventoryDaysLevel: { $round: ["$inventoryDaysLevel", 2] }, // Round to 2 decimals
-//                 noOfDaysOOS: 1,
-//                 remarksOOS: 1,
-//                 "user_first_name": "$first_name",
-//                 "user_last_name": "$last_name",
-//                 _id: 0
-//             }
-//         },
+app.post("/retrieve-QTTS-data", async (req, res) => {
+  const { branches } = req.body; // Get branches from request body
 
-//           // Sort the output by specific fields
-//           {
-//               $sort: {
-//                   date: 1, // Sort by date in ascending order
-//                   "user_first_name": 1
-//               }
-//           }
-//       ]);
+  if (!branches || !Array.isArray(branches)) {
+    return res
+      .status(400)
+      .json({ status: 400, message: "Invalid branch data" });
+  }
 
-//       return res.send({ status: 200, data });
-//   } catch (error) {
-//       return res.status(500).send({ error: error.message });
-//   }
-// });
+  try {
+    const rtvData = await QTTS.find({
+      outlet: { $in: branches }, // Filter by branches
+    });
 
-// app.post("/export-RTV-data", async (req, res) => {
-//   const { start, end } = req.body;
+    console.log("Filtered RTV data:", rtvData);
+    return res.status(200).json({ status: 200, data: rtvData });
+  } catch (error) {
+    console.error("Error retrieving RTV data:", error);
+    return res.status(500).json({ status: 500, message: "Server error" });
+  }
+});
 
-//   try {
-//       const data = await mongoose.model("TowiReturnToVendor").aggregate([
-//           // Match documents within the specified date range
-//           {
-//               $match: {
-//                   $expr: {
-//                       $and: [
-//                           { $gte: [{ $toDate: "$date" }, new Date(start)] },
-//                           { $lt: [{ $toDate: "$date" }, new Date(end)] }
-//                       ]
-//                   }
-//               }
-//           },
-//           // Optionally join with another collection if needed
-//           {
-//               $lookup: {
-//                   from: "users",
-//                   localField: "UserEmail", // Adjust field to match schema
-//                   foreignField: "email",
-//                   as: "user_details"
-//               }
-//           },
-//           // Flatten the structure by merging user details into the root object
-//           {
-//               $replaceRoot: {
-//                   newRoot: {
-//                       $mergeObjects: [
-//                           { $arrayElemAt: ["$user_details", 0] },
-//                           "$$ROOT"
-//                       ]
-//                   }
-//               }
-//           },
-//           // Select and rename fields for the output
-//           {
-//             $project: {
-//                 date: 1,
-//                 merchandiserName: 1,
-//                 inputId: 1,
-//                 UserEmail: 1,
-//                 outlet: 1,
-//                 category: 1,
-//                 item: 1,
-//                 quantity: 1,
-//                 driverName: 1,
-//                 plateNumber: 1,
-//                 pullOutReason: 1,
-//             }
-//         },
+app.post("/export-competitors-data", async (req, res) => {
+  const { start, end } = req.body;
 
-//           // Sort the output by specific fields
-//           {
-//               $sort: {
-//                   date: 1, // Sort by date in ascending order
-//                   "user_first_name": 1
-//               }
-//           }
-//       ]);
+  try {
+    const data = await mongoose.model("Competitors").aggregate([
+      // Match documents within the specified date range
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gte: [{ $toDate: "$date" }, new Date(start)] },
+              { $lt: [{ $toDate: "$date" }, new Date(end)] },
+            ],
+          },
+        },
+      },
+      // Join with user collection to get user details
+      {
+        $lookup: {
+          from: "users",
+          localField: "userEmail", // Ensure correct field reference
+          foreignField: "email",
+          as: "user_details",
+        },
+      },
+      // Merge user details with the main document
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [{ $arrayElemAt: ["$user_details", 0] }, "$$ROOT"],
+          },
+        },
+      },
+      // Select and rename fields for the export
+      {
+        $project: {
+          _id: 0,
+          id: { $add: [1, "$$ROOT.index"] }, // Ensure unique IDs
+          date: 1,
+          inputId: 1,
+          merchandiserName: 1,
+          outlet: 1,
+          store: 1,
+          company: 1,
+          brand: 1,
+          promotionalType: 1,
+          promotionalTypeDetails: 1,
+          displayLocation: 1,
+          pricing: 1,
+          durationOfPromo: 1,
+          impactToOurProduct: 1,
+          customerFeedback: 1,
+          user_first_name: "$first_name",
+          user_last_name: "$last_name",
+        },
+      },
+      // Sort the output by date and merchandiser name
+      {
+        $sort: {
+          date: 1, // Sort by date in ascending order
+          merchandiserName: 1,
+        },
+      },
+    ]);
 
-//       return res.send({ status: 200, data });
-//   } catch (error) {
-//       return res.status(500).send({ error: error.message });
-//   }
-// });
+    return res.send({ status: 200, data });
+  } catch (error) {
+    return res.status(500).send({ error: error.message });
+  }
+});
+
+app.post("/export-PSR-data", async (req, res) => {
+  const { start, end } = req.body;
+  console.log("Received Request:", { start, end });
+
+  try {
+    // Log start and end dates to check what is being sent
+    console.log("Start Date:", new Date(start));
+    console.log("End Date:", new Date(end));
+
+    // Convert the Unix timestamps (start and end) to a date string in the format YYYY-MM-DD
+    const startDate = new Date(start).toISOString().split("T")[0];
+    const endDate = new Date(end).toISOString().split("T")[0];
+    console.log("Converted Start Date:", startDate);
+    console.log("Converted End Date:", endDate);
+
+    const data = await mongoose.model("QTTScoring").aggregate([
+      {
+        $match: {
+          // Ensure both the input date and the database date are compared correctly
+          date: { $gte: startDate, $lt: endDate }, // Compare with the date string
+          selectedType: "PSR",
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userEmail",
+          foreignField: "email",
+          as: "user_details",
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [{ $arrayElemAt: ["$user_details", 0] }, "$$ROOT"],
+          },
+        },
+      },
+      {
+        $project: {
+          count: { $add: ["$key", 1] },
+          date: 1,
+          merchandiserName: 1,
+          outlet: 1,
+          selectedType: 1,
+          firstBrand: {
+            $ifNull: [
+              { $arrayElemAt: [{ $objectToArray: "$selectedAnswers" }, 0] },
+              {
+                k: "First Brand seen inside with main shelf and headers.",
+                v: "No Answer",
+              },
+            ],
+          },
+          complianceDOG: {
+            $ifNull: [
+              { $arrayElemAt: [{ $objectToArray: "$selectedAnswers" }, 1] },
+              { k: "Compliance with DOG planogram.", v: "No Answer" },
+            ],
+          },
+          complianceCAT: {
+            $ifNull: [
+              { $arrayElemAt: [{ $objectToArray: "$selectedAnswers" }, 2] },
+              { k: "Compliance with CAT planogram.", v: "No Answer" },
+            ],
+          },
+
+          beforeImage: { $ifNull: ["$beforeImage", ""] },
+          afterImage: { $ifNull: ["$afterImage", ""] },
+        },
+      },
+      {
+        $sort: {
+          date: 1,
+          merchandiserName: 1,
+        },
+      },
+    ]);
+
+    // Log the data to see what is returned from the aggregation query
+    console.log("Query Result:", data);
+
+    if (data.length === 0) {
+      return res.status(200).send({ status: 200, data: [] }); // No data found
+    }
+
+    return res.send({ status: 200, data });
+  } catch (error) {
+    console.error("Aggregation Error:", error.message);
+    return res.status(500).send({ error: error.message });
+  }
+});
+
+app.post("/export-VET-data", async (req, res) => {
+  const { start, end } = req.body;
+  console.log("Received Request:", { start, end });
+
+  try {
+    const data = await mongoose.model("QTTScoring").aggregate([
+      {
+        $match: {
+          date: { $gte: start, $lt: end }, // Compare as strings
+          selectedType: "VET",
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userEmail",
+          foreignField: "email",
+          as: "user_details",
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [{ $arrayElemAt: ["$user_details", 0] }, "$$ROOT"],
+          },
+        },
+      },
+      {
+        $project: {
+          count: { $add: ["$key", 1] },
+          date: 1,
+          merchandiserName: 1,
+          outlet: 1,
+          selectedType: 1,
+          selectedAnswers: 1, // Include selectedAnswers to log it
+          shelfSpace: {
+            $ifNull: [
+              {
+                $getField: {
+                  field: "80% Shelf Space.",
+                  input: "$selectedAnswers",
+                },
+              },
+              "",
+            ],
+          },
+          designatedRack: {
+            $ifNull: [
+              {
+                $getField: {
+                  field: "Designated Rack.",
+                  input: "$selectedAnswers",
+                },
+              },
+              "",
+            ],
+          },
+          beforeImage: { $ifNull: ["$beforeImage", ""] },
+          afterImage: { $ifNull: ["$afterImage", ""] },
+        },
+      },
+      {
+        $sort: {
+          date: 1,
+          merchandiserName: 1,
+        },
+      },
+    ]);
+
+    console.log("Query Result:", data);
+
+    return res.send({ status: 200, data });
+  } catch (error) {
+    console.error("Aggregation Error:", error.message);
+    return res.status(500).send({ error: error.message });
+  }
+});
 
 // app.post("/filter-RTV-data", async (req, res) => {
 //   const { selectDate, branches } = req.body; // Get date and branches from request body
 
 //   if (!branches || !Array.isArray(branches)) {
-//     return res.status(400).json({ status: 400, message: "Invalid branch data" });
+//     return res
+//       .status(400)
+//       .json({ status: 400, message: "Invalid branch data" });
 //   }
 
 //   try {
-//     const rtvData = await RTV.find({
+//     const rtvData = await QTTS.find({
 //       date: { $eq: selectDate },
 //       outlet: { $in: branches }, // Filter by branches
 //     });
