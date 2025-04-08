@@ -119,9 +119,9 @@ const s3 = new AWS.S3({
 });
 
 const QTTs3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID_QTT_COMPE,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_QTT_COMPE,
+  region: process.env.AWS_REGION_QTT_COMPE,
 });
 
 // Endpoint to generate a pre-signed URL for image uploads
