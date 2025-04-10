@@ -18,6 +18,7 @@ const CompetitorDataSchema = new mongoose.Schema(
     impactToOurProduct: String,
     customerFeedback: String,
   },
+
   {
     collection: "Competitors",
   }

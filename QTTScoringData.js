@@ -8,7 +8,7 @@ const QTTScoringSchema = new mongoose.Schema(
     merchandiserName: String,
     outlet: String,
     selectedType: String,
-    selectedAnswers: { type: Object, default: {} }, // Accepts key-value pairs
+    selectedAnswers: { type: Object, default: {} },
     beforeImage: String,
     afterImage: String,
   },
